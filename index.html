@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Extractor de Sprites</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+
+body{
+    font-family: Arial, sans-serif;
+    margin:20px;
+}
+
+h1{
+    margin-bottom:20px;
+}
+
+.controls{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:center;
+    margin-bottom:20px;
+}
+
+label{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+}
+
+canvas{
+    border:1px solid #ccc;
+}
+
+#sheetCanvas{
+    margin-top:10px;
+    max-width:100%;
+}
+
+.preview{
+    margin-top:20px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+.preview canvas{
+    image-rendering: pixelated;
+    border:1px solid #888;
+}
+
+.info{
+    margin-top:10px;
+    font-weight:bold;
+}
+
+.groups-panel{
+    border:1px solid #ddd;
+    display:flex;
+    flex-wrap:nowrap;
+    gap:16px;
+    align-items:flex-start;
+    margin:20px 0;
+    padding:12px;
+}
+
+.export-panel{
+    border:1px solid #ddd;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    align-items:end;
+    margin:20px 0;
+    padding:12px;
+}
+
+.export-panel legend{
+    font-weight:bold;
+}
+
+.group-editor{
+    display:grid;
+    grid-template-columns:auto minmax(280px, 1fr);
+    gap:10px 16px;
+    align-items:flex-start;
+    flex:1;
+}
+
+.group-form{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.group-actions{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    grid-column:2;
+}
+
+.group-export-options{
+    border:1px solid #ddd;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    padding:10px;
+}
+
+.group-export-options legend{
+    font-weight:bold;
+}
+
+.custom-group-options{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+}
+
+.custom-group-options[hidden]{
+    display:none;
+}
+
+.group-list{
+    min-width:220px;
+}
+
+.selection-info{
+    width:100%;
+    font-size:14px;
+    font-weight:bold;
+}
+
+.group-preview{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    flex:0 0 auto;
+    grid-column:1;
+    grid-row:1 / span 8;
+}
+
+.group-editor > label:not(.group-preview),
+.group-editor > fieldset,
+.group-editor > .group-actions,
+.group-editor > .selection-info{
+    grid-column:2;
+}
+
+.group-preview canvas{
+    background:
+        linear-gradient(45deg, #ddd 25%, transparent 25%),
+        linear-gradient(-45deg, #ddd 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #ddd 75%),
+        linear-gradient(-45deg, transparent 75%, #ddd 75%);
+    background-color:#fff;
+    background-position:0 0, 0 8px, 8px -8px, -8px 0;
+    background-size:16px 16px;
+    image-rendering:pixelated;
+}
+
+button{
+    padding:8px 16px;
+    cursor:pointer;
+}
+
+input,select{
+    padding:4px;
+}
+
+@media (max-width: 800px){
+
+    .groups-panel,
+    .group-editor{
+        flex-wrap:wrap;
+    }
+
+    .group-editor{
+        display:flex;
+    }
+
+    .group-preview,
+    .group-editor > label:not(.group-preview),
+    .group-editor > fieldset,
+    .group-editor > .group-actions,
+    .group-editor > .selection-info{
+        grid-column:auto;
+        grid-row:auto;
+    }
+
+}
+
+</style>
+</head>
+<body>
+
+<h1>Extractor Automático de Sprites</h1>
+
+<div class="controls">
+
+    <label>
+        Spritesheet
+        <input type="file" id="fileInput" accept="image/*">
+    </label>
+
+</div>
+
+<div class="info" id="info"></div>
+
+<div class="groups-panel">
+
+    <label>
+        Grupos
+        <select id="groupList" class="group-list" size="6"></select>
+    </label>
+
+    <div class="group-editor">
+
+        <label>
+            Nombre del grupo
+            <input type="text" id="groupName" placeholder="Ej: Caminar">
+        </label>
+
+        <fieldset class="group-export-options">
+
+            <legend>Exportación del grupo</legend>
+
+            <label>
+                Opciones
+                <select id="groupExportMode">
+                    <option value="global" selected>Usar opciones globales</option>
+                    <option value="custom">Personalizada</option>
+                </select>
+            </label>
+
+            <label>
+                Transformación
+                <select id="groupTransformMode">
+                    <option value="none" selected>Sin transformación</option>
+                    <option value="rotate90">Girar 90°</option>
+                    <option value="rotate-90">Girar -90°</option>
+                    <option value="rotate180">Girar 180°</option>
+                    <option value="flipH">Voltear horizontalmente</option>
+                    <option value="flipV">Voltear verticalmente</option>
+                </select>
+            </label>
+
+            <div class="custom-group-options" id="customGroupOptions" hidden>
+
+                <label>
+                    Ancho destino
+                    <input type="number" id="groupTargetWidth" value="32" min="1">
+                </label>
+
+                <label>
+                    Alto destino
+                    <input type="number" id="groupTargetHeight" value="32" min="1">
+                </label>
+
+                <label>
+                    Relleno Horizontal
+                    <select id="groupHorizontalMode">
+                        <option value="left">Izquierda</option>
+                        <option value="right">Derecha</option>
+                        <option value="both" selected>Ambos lados</option>
+                    </select>
+                </label>
+
+                <label>
+                    Relleno Vertical
+                    <select id="groupVerticalMode">
+                        <option value="top" selected>Arriba</option>
+                        <option value="bottom">Abajo</option>
+                        <option value="both">Ambos lados</option>
+                    </select>
+                </label>
+
+            </div>
+
+        </fieldset>
+        
+        <div class="group-actions">
+		<button id="clearSelectionBtn">Limpiar selección</button>
+        <button id="createGroupBtn">Crear grupo</button>
+        <button id="updateGroupBtn">Guardar cambios</button>
+        <button id="deleteGroupBtn">Eliminar grupo</button>
+        </div>
+
+        <label class="group-preview">
+            Previsualización exportada
+            <canvas id="groupPreviewCanvas" width="64" height="64"></canvas>
+        </label>
+
+        <div class="selection-info" id="selectionInfo">
+            Selecciona sprites haciendo clic en los rectángulos.
+        </div>
+
+    </div>
+
+</div>
+
+<canvas id="sheetCanvas"></canvas>
+
+<fieldset class="export-panel">
+
+    <legend>Exportación global</legend>
+
+    <label>
+        Ancho destino
+        <input type="number" id="targetWidth" value="32" min="1">
+    </label>
+
+    <label>
+        Alto destino
+        <input type="number" id="targetHeight" value="32" min="1">
+    </label>
+
+    <label>
+        Relleno Horizontal
+        <select id="horizontalMode">
+            <option value="left">Izquierda</option>
+            <option value="right">Derecha</option>
+            <option value="both" selected>Ambos lados</option>
+        </select>
+    </label>
+
+    <label>
+        Relleno Vertical
+        <select id="verticalMode">
+            <option value="top" selected>Arriba</option>
+            <option value="bottom">Abajo</option>
+            <option value="both">Ambos lados</option>
+        </select>
+    </label>
+
+    <button id="processBtn">
+        Exportar grupos ZIP
+    </button>
+
+</fieldset>
+
+<div class="preview" id="preview"></div>
+
+<script>
+
+const fileInput = document.getElementById("fileInput");
+const processBtn = document.getElementById("processBtn");
+const sheetCanvas = document.getElementById("sheetCanvas");
+const ctx = sheetCanvas.getContext("2d");
+const preview = document.getElementById("preview");
+const info = document.getElementById("info");
+const groupList = document.getElementById("groupList");
+const groupName = document.getElementById("groupName");
+const groupExportMode = document.getElementById("groupExportMode");
+const groupTransformMode = document.getElementById("groupTransformMode");
+const customGroupOptions = document.getElementById("customGroupOptions");
+const groupTargetWidth = document.getElementById("groupTargetWidth");
+const groupTargetHeight = document.getElementById("groupTargetHeight");
+const groupHorizontalMode = document.getElementById("groupHorizontalMode");
+const groupVerticalMode = document.getElementById("groupVerticalMode");
+const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+const createGroupBtn = document.getElementById("createGroupBtn");
+const updateGroupBtn = document.getElementById("updateGroupBtn");
+const deleteGroupBtn = document.getElementById("deleteGroupBtn");
+const selectionInfo = document.getElementById("selectionInfo");
+const groupPreviewCanvas = document.getElementById("groupPreviewCanvas");
+const groupPreviewCtx = groupPreviewCanvas.getContext("2d");
+
+let loadedImage = null;
+let detectedSprites = [];
+let groups = [];
+let activeGroupId = null;
+let selectedSpriteIndexes = new Set();
+let nextGroupId = 1;
+let groupPreviewFrames = [];
+let groupPreviewFrameIndex = 0;
+
+fileInput.addEventListener("change", e => {
+
+    const file = e.target.files[0];
+
+    if(!file) return;
+
+    const img = new Image();
+
+    img.onload = () => {
+
+        loadedImage = img;
+        groups = [];
+        activeGroupId = null;
+        selectedSpriteIndexes.clear();
+        nextGroupId = 1;
+        resetGroupForm();
+
+        sheetCanvas.width = img.width;
+        sheetCanvas.height = img.height;
+
+        info.textContent =
+            `Imagen cargada: ${img.width} x ${img.height}`;
+
+        renderDetectionOverlay();
+        renderGroups();
+
+    };
+
+    img.src = URL.createObjectURL(file);
+
+});
+
+processBtn.addEventListener("click", async () => {
+
+    if(!loadedImage){
+
+        alert("Seleccione una imagen.");
+        return;
+
+    }
+
+    const { imageData, sprites } =
+        renderDetectionOverlay();
+
+    const globalExportOptions =
+        getExportOptions();
+
+    if(sprites.length === 0){
+
+        alert("No se detectaron sprites.");
+        return;
+
+    }
+
+    if(groups.length === 0){
+
+        alert("Cree al menos un grupo para exportar.");
+        return;
+
+    }
+
+    const zip = new JSZip();
+
+    for(const group of groups){
+
+        const groupExportOptions =
+            getEffectiveGroupExportOptions(
+                group,
+                globalExportOptions
+            );
+
+        const fileNamePrefix =
+            sanitizeFileName(group.name);
+
+        for(let i=0;i<group.spriteIndexes.length;i++){
+
+            const spriteIndex =
+                group.spriteIndexes[i];
+
+            if(!sprites[spriteIndex])
+                continue;
+
+            const spriteCanvas =
+                extractSpriteWithOptions(
+                    imageData,
+                    sprites[spriteIndex],
+                    groupExportOptions
+                );
+
+            const blob =
+                await canvasToBlob(spriteCanvas);
+
+            zip.file(
+                `${fileNamePrefix}_${i+1}.png`,
+                blob
+            );
+
+        }
+
+    }
+
+    const zipBlob =
+        await zip.generateAsync({
+            type:"blob"
+        });
+
+    const a =
+        document.createElement("a");
+
+    a.href =
+        URL.createObjectURL(zipBlob);
+
+    a.download =
+        "sprites.zip";
+
+    a.click();
+
+});
+
+sheetCanvas.addEventListener("click", e => {
+
+    if(!loadedImage || detectedSprites.length === 0)
+        return;
+
+    const spriteIndex =
+        getSpriteIndexFromCanvasEvent(e);
+
+    if(spriteIndex === -1)
+        return;
+
+    if(selectedSpriteIndexes.has(spriteIndex)){
+
+        selectedSpriteIndexes.delete(spriteIndex);
+
+    }else{
+
+        selectedSpriteIndexes.add(spriteIndex);
+
+    }
+
+    renderCurrentOverlay();
+    updateSelectionInfo();
+    updateGroupPreviewFrames();
+
+});
+
+clearSelectionBtn.addEventListener("click", () => {
+
+    selectedSpriteIndexes.clear();
+    renderCurrentOverlay();
+    updateSelectionInfo();
+    updateGroupPreviewFrames();
+
+});
+
+groupExportMode.addEventListener("change", () => {
+
+    updateGroupExportModeVisibility();
+    updateGroupPreviewFrames();
+
+});
+
+[
+    groupTransformMode,
+    groupTargetWidth,
+    groupTargetHeight,
+    groupHorizontalMode,
+    groupVerticalMode,
+    document.getElementById("targetWidth"),
+    document.getElementById("targetHeight"),
+    document.getElementById("horizontalMode"),
+    document.getElementById("verticalMode")
+].forEach(control => {
+
+    const updatePreview = () => {
+
+        updateGroupPreviewFrames();
+
+    };
+
+    control.addEventListener("input", updatePreview);
+    control.addEventListener("change", updatePreview);
+
+});
+
+createGroupBtn.addEventListener("click", () => {
+
+    const name =
+        groupName.value.trim();
+
+    if(!name){
+
+        alert("Escriba un nombre para el grupo.");
+        return;
+
+    }
+
+    if(selectedSpriteIndexes.size === 0){
+
+        alert("Seleccione al menos un sprite para el grupo.");
+        return;
+
+    }
+
+    const exportOptions =
+        getGroupExportOptions();
+
+    if(!exportOptions)
+        return;
+
+    groups.push({
+
+        id: nextGroupId++,
+        name,
+        spriteIndexes: Array.from(selectedSpriteIndexes).sort((a,b) => a-b),
+        exportOptions
+
+    });
+
+    activeGroupId =
+        groups[groups.length - 1].id;
+
+    renderGroups();
+    renderCurrentOverlay();
+    updateGroupPreviewFrames();
+
+});
+
+updateGroupBtn.addEventListener("click", () => {
+
+    const group =
+        getActiveGroup();
+
+    if(!group){
+
+        alert("Seleccione un grupo para modificar.");
+        return;
+
+    }
+
+    const name =
+        groupName.value.trim();
+
+    if(!name){
+
+        alert("Escriba un nombre para el grupo.");
+        return;
+
+    }
+
+    if(selectedSpriteIndexes.size === 0){
+
+        alert("Seleccione al menos un sprite para el grupo.");
+        return;
+
+    }
+
+    const exportOptions =
+        getGroupExportOptions();
+
+    if(!exportOptions)
+        return;
+
+    group.name = name;
+    group.spriteIndexes =
+        Array.from(selectedSpriteIndexes).sort((a,b) => a-b);
+    group.exportOptions =
+        exportOptions;
+
+    renderGroups();
+    renderCurrentOverlay();
+    updateGroupPreviewFrames();
+
+});
+
+deleteGroupBtn.addEventListener("click", () => {
+
+    const group =
+        getActiveGroup();
+
+    if(!group){
+
+        alert("Seleccione un grupo para eliminar.");
+        return;
+
+    }
+
+    groups =
+        groups.filter(item => item.id !== group.id);
+
+    activeGroupId = null;
+    groupList.value = "";
+    resetGroupForm();
+    selectedSpriteIndexes.clear();
+
+    renderGroups();
+    renderCurrentOverlay();
+    updateSelectionInfo();
+    updateGroupPreviewFrames();
+
+});
+
+groupList.addEventListener("change", () => {
+
+    activeGroupId =
+        Number(groupList.value) || null;
+
+    const group =
+        getActiveGroup();
+
+    if(!group)
+        return;
+
+    groupName.value =
+        group.name;
+
+    setGroupExportOptions(
+        group.exportOptions
+    );
+
+    selectedSpriteIndexes =
+        new Set(group.spriteIndexes);
+
+    renderCurrentOverlay();
+    updateSelectionInfo();
+    updateGroupPreviewFrames();
+
+});
+
+setInterval(() => {
+
+    drawNextGroupPreviewFrame();
+
+}, 160);
+
+function getExportOptions(){
+
+    return {
+
+        targetW:
+            parseInt(document.getElementById("targetWidth").value, 10),
+
+        targetH:
+            parseInt(document.getElementById("targetHeight").value, 10),
+
+        horizontalMode:
+            document.getElementById("horizontalMode").value,
+
+        verticalMode:
+            document.getElementById("verticalMode").value
+
+    };
+
+}
+
+function getPreviewExportOptions(){
+
+    const transform =
+        groupTransformMode.value;
+
+    if(groupExportMode.value === "global"){
+
+        const targetW =
+            readPositiveIntegerValue(document.getElementById("targetWidth").value);
+
+        const targetH =
+            readPositiveIntegerValue(document.getElementById("targetHeight").value);
+
+        if(targetW === null || targetH === null)
+            return null;
+
+        return {
+            targetW,
+            targetH,
+            horizontalMode: document.getElementById("horizontalMode").value,
+            verticalMode: document.getElementById("verticalMode").value,
+            transform
+        };
+
+    }
+
+    const targetW =
+        readPositiveIntegerValue(groupTargetWidth.value);
+
+    const targetH =
+        readPositiveIntegerValue(groupTargetHeight.value);
+
+    if(targetW === null || targetH === null)
+        return null;
+
+    return {
+        targetW,
+        targetH,
+        horizontalMode: groupHorizontalMode.value,
+        verticalMode: groupVerticalMode.value,
+        transform
+    };
+
+}
+
+function getGroupExportOptions(){
+
+    if(groupExportMode.value === "global"){
+
+        return {
+            mode: "global",
+            transform: groupTransformMode.value
+        };
+
+    }
+
+    const targetW =
+        readPositiveInteger(groupTargetWidth, "Ancho destino del grupo");
+
+    if(targetW === null)
+        return null;
+
+    const targetH =
+        readPositiveInteger(groupTargetHeight, "Alto destino del grupo");
+
+    if(targetH === null)
+        return null;
+
+    return {
+
+        mode: "custom",
+        transform: groupTransformMode.value,
+        custom: {
+            targetW,
+            targetH,
+            horizontalMode: groupHorizontalMode.value,
+            verticalMode: groupVerticalMode.value
+        }
+
+    };
+
+}
+
+function getEffectiveGroupExportOptions(group, globalExportOptions){
+
+    const transform =
+        group.exportOptions && group.exportOptions.transform
+            ? group.exportOptions.transform
+            : "none";
+
+    if(
+        group.exportOptions &&
+        group.exportOptions.mode === "custom" &&
+        group.exportOptions.custom
+    ){
+
+        return {
+            ...group.exportOptions.custom,
+            transform
+        };
+
+    }
+
+    return {
+        ...globalExportOptions,
+        transform
+    };
+
+}
+
+function extractSpriteWithOptions(imageData, rect, exportOptions){
+
+    const spriteCanvas =
+        extractSprite(
+            imageData,
+            rect,
+            exportOptions.targetW,
+            exportOptions.targetH,
+            exportOptions.horizontalMode,
+            exportOptions.verticalMode
+        );
+
+    return transformCanvas(
+        spriteCanvas,
+        exportOptions.transform || "none"
+    );
+
+}
+
+function transformCanvas(sourceCanvas, transform){
+
+    if(transform === "none")
+        return sourceCanvas;
+
+    const outputCanvas =
+        document.createElement("canvas");
+
+    const rotatesSideways =
+        transform === "rotate90" ||
+        transform === "rotate-90";
+
+    outputCanvas.width =
+        rotatesSideways ? sourceCanvas.height : sourceCanvas.width;
+
+    outputCanvas.height =
+        rotatesSideways ? sourceCanvas.width : sourceCanvas.height;
+
+    const outputCtx =
+        outputCanvas.getContext("2d");
+
+    switch(transform){
+
+        case "rotate90":
+            outputCtx.translate(outputCanvas.width, 0);
+            outputCtx.rotate(Math.PI / 2);
+            break;
+
+        case "rotate-90":
+            outputCtx.translate(0, outputCanvas.height);
+            outputCtx.rotate(-Math.PI / 2);
+            break;
+
+        case "rotate180":
+            outputCtx.translate(outputCanvas.width, outputCanvas.height);
+            outputCtx.rotate(Math.PI);
+            break;
+
+        case "flipH":
+            outputCtx.translate(outputCanvas.width, 0);
+            outputCtx.scale(-1, 1);
+            break;
+
+        case "flipV":
+            outputCtx.translate(0, outputCanvas.height);
+            outputCtx.scale(1, -1);
+            break;
+
+    }
+
+    outputCtx.drawImage(
+        sourceCanvas,
+        0,
+        0
+    );
+
+    return outputCanvas;
+
+}
+
+function sanitizeFileName(name){
+
+    const safeName =
+        name
+            .replace(/[<>:"/\\|?*]+/g, "_")
+            .trim();
+
+    return safeName || "grupo";
+
+}
+
+function setGroupExportOptions(exportOptions){
+
+    const options =
+        exportOptions || {
+            mode: "global"
+        };
+
+    groupExportMode.value =
+        options.mode === "custom" ? "custom" : "global";
+
+    groupTransformMode.value =
+        options.transform || "none";
+
+    const customOptions =
+        options.custom || getExportOptions();
+
+    groupTargetWidth.value =
+        customOptions.targetW;
+
+    groupTargetHeight.value =
+        customOptions.targetH;
+
+    groupHorizontalMode.value =
+        customOptions.horizontalMode;
+
+    groupVerticalMode.value =
+        customOptions.verticalMode;
+
+    updateGroupExportModeVisibility();
+
+}
+
+function resetGroupForm(){
+
+    groupName.value = "";
+    setGroupExportOptions({
+        mode: "global"
+    });
+
+}
+
+function updateGroupExportModeVisibility(){
+
+    customGroupOptions.hidden =
+        groupExportMode.value !== "custom";
+
+}
+
+function readPositiveInteger(input, fieldName){
+
+    const value =
+        Number(input.value);
+
+    if(!Number.isInteger(value) || value < 1){
+
+        alert(`${fieldName} debe ser un número entero mayor que cero.`);
+        input.focus();
+        return null;
+
+    }
+
+    return value;
+
+}
+
+function readPositiveIntegerValue(value){
+
+    const number =
+        Number(value);
+
+    if(!Number.isInteger(number) || number < 1)
+        return null;
+
+    return number;
+
+}
+
+function updateGroupPreviewFrames(){
+
+    groupPreviewFrames = [];
+    groupPreviewFrameIndex = 0;
+
+    if(
+        !loadedImage ||
+        detectedSprites.length === 0 ||
+        selectedSpriteIndexes.size === 0
+    ){
+
+        clearGroupPreview();
+        return;
+
+    }
+
+    const exportOptions =
+        getPreviewExportOptions();
+
+    if(!exportOptions){
+
+        clearGroupPreview();
+        return;
+
+    }
+
+    const imageData =
+        getLoadedImageData();
+
+    const selectedIndexes =
+        Array.from(selectedSpriteIndexes).sort((a,b) => a-b);
+
+    groupPreviewFrames =
+        selectedIndexes
+            .filter(index => detectedSprites[index])
+            .map(index => (
+                extractSpriteWithOptions(
+                    imageData,
+                    detectedSprites[index],
+                    exportOptions
+                )
+            ));
+
+    fitGroupPreviewCanvas();
+    drawNextGroupPreviewFrame();
+
+}
+
+function getLoadedImageData(){
+
+    const tempCanvas =
+        document.createElement("canvas");
+
+    tempCanvas.width =
+        loadedImage.width;
+
+    tempCanvas.height =
+        loadedImage.height;
+
+    const tempCtx =
+        tempCanvas.getContext("2d");
+
+    tempCtx.drawImage(
+        loadedImage,
+        0,
+        0
+    );
+
+    return tempCtx.getImageData(
+        0,
+        0,
+        tempCanvas.width,
+        tempCanvas.height
+    );
+
+}
+
+function fitGroupPreviewCanvas(){
+
+    const width =
+        Math.max(
+            1,
+            ...groupPreviewFrames.map(frame => frame.width)
+        );
+
+    const height =
+        Math.max(
+            1,
+            ...groupPreviewFrames.map(frame => frame.height)
+        );
+
+    groupPreviewCanvas.width =
+        width;
+
+    groupPreviewCanvas.height =
+        height;
+
+    groupPreviewCanvas.style.width =
+        `${width}px`;
+
+    groupPreviewCanvas.style.height =
+        `${height}px`;
+
+}
+
+function drawNextGroupPreviewFrame(){
+
+    if(groupPreviewFrames.length === 0){
+
+        clearGroupPreview();
+        return;
+
+    }
+
+    const frame =
+        groupPreviewFrames[
+            groupPreviewFrameIndex % groupPreviewFrames.length
+        ];
+
+    groupPreviewCtx.clearRect(
+        0,
+        0,
+        groupPreviewCanvas.width,
+        groupPreviewCanvas.height
+    );
+
+    groupPreviewCtx.drawImage(
+        frame,
+        Math.floor((groupPreviewCanvas.width - frame.width) / 2),
+        Math.floor((groupPreviewCanvas.height - frame.height) / 2)
+    );
+
+    groupPreviewFrameIndex =
+        (groupPreviewFrameIndex + 1) % groupPreviewFrames.length;
+
+}
+
+function clearGroupPreview(){
+
+    groupPreviewCtx.clearRect(
+        0,
+        0,
+        groupPreviewCanvas.width,
+        groupPreviewCanvas.height
+    );
+
+}
+
+function getSheetImageData(){
+
+    drawSheetImage();
+
+    return ctx.getImageData(
+        0,
+        0,
+        sheetCanvas.width,
+        sheetCanvas.height
+    );
+
+}
+
+function drawSheetImage(){
+
+    ctx.clearRect(
+        0,
+        0,
+        sheetCanvas.width,
+        sheetCanvas.height
+    );
+
+    ctx.drawImage(
+        loadedImage,
+        0,
+        0
+    );
+
+}
+
+function renderDetectionOverlay(){
+
+    preview.innerHTML = "";
+
+    const imageData =
+        getSheetImageData();
+
+    detectedSprites =
+        detectSprites(imageData);
+
+    selectedSpriteIndexes =
+        new Set(
+            Array.from(selectedSpriteIndexes)
+                .filter(index => index < detectedSprites.length)
+        );
+
+    info.textContent =
+        `Imagen cargada: ${sheetCanvas.width} x ${sheetCanvas.height} | Sprites detectados: ${detectedSprites.length}`;
+
+    drawSpriteRectangles();
+    updateSelectionInfo();
+
+    return {
+        imageData,
+        sprites: detectedSprites
+    };
+
+}
+
+function renderCurrentOverlay(){
+
+    if(!loadedImage)
+        return;
+
+    drawSheetImage();
+    drawSpriteRectangles();
+
+}
+
+function drawSpriteRectangles(){
+
+    ctx.save();
+
+    for(let i=0;i<detectedSprites.length;i++){
+
+        const sprite =
+            detectedSprites[i];
+
+        const isSelected =
+            selectedSpriteIndexes.has(i);
+
+        ctx.strokeStyle =
+            isSelected ? "#00a6ff" : "#ff2d55";
+
+        ctx.lineWidth =
+            isSelected ? 2 : 1;
+
+        ctx.strokeRect(
+            sprite.x + 0.5,
+            sprite.y + 0.5,
+            sprite.w,
+            sprite.h
+        );
+
+    }
+
+    ctx.restore();
+
+}
+
+function getSpriteIndexFromCanvasEvent(e){
+
+    const rect =
+        sheetCanvas.getBoundingClientRect();
+
+    const scaleX =
+        sheetCanvas.width / rect.width;
+
+    const scaleY =
+        sheetCanvas.height / rect.height;
+
+    const x =
+        (e.clientX - rect.left) * scaleX;
+
+    const y =
+        (e.clientY - rect.top) * scaleY;
+
+    for(let i=detectedSprites.length-1;i>=0;i--){
+
+        const sprite =
+            detectedSprites[i];
+
+        if(
+            x >= sprite.x &&
+            y >= sprite.y &&
+            x <= sprite.x + sprite.w &&
+            y <= sprite.y + sprite.h
+        ){
+
+            return i;
+
+        }
+
+    }
+
+    return -1;
+
+}
+
+function renderGroups(){
+
+    groupList.innerHTML = "";
+
+    for(const group of groups){
+
+        const option =
+            document.createElement("option");
+
+        option.value =
+            group.id;
+
+        option.textContent =
+            `${group.name} (${group.spriteIndexes.length})`;
+
+        if(group.id === activeGroupId)
+            option.selected = true;
+
+        groupList.appendChild(option);
+
+    }
+
+    updateSelectionInfo();
+
+}
+
+function updateSelectionInfo(){
+
+    const selectedCount =
+        selectedSpriteIndexes.size;
+
+    const group =
+        getActiveGroup();
+
+    selectionInfo.textContent =
+        group
+            ? `Editando "${group.name}". Sprites seleccionados: ${selectedCount}.`
+            : `Nuevo grupo. Sprites seleccionados: ${selectedCount}.`;
+
+}
+
+function getActiveGroup(){
+
+    return groups.find(group => group.id === activeGroupId) || null;
+
+}
+
+function detectSprites(imageData){
+
+    const width = imageData.width;
+    const height = imageData.height;
+    const data = imageData.data;
+
+    const visited =
+        new Uint8Array(width * height);
+
+    const sprites = [];
+
+    function alpha(x,y){
+
+        return data[
+            (y*width+x)*4+3
+        ];
+
+    }
+
+    for(let y=0;y<height;y++){
+
+        for(let x=0;x<width;x++){
+
+            const index =
+                y*width+x;
+
+            if(visited[index])
+                continue;
+
+            if(alpha(x,y)===0)
+                continue;
+
+            let minX=x;
+            let maxX=x;
+            let minY=y;
+            let maxY=y;
+
+            const queue=[[x,y]];
+            visited[index]=1;
+
+            while(queue.length){
+
+                const [cx,cy] =
+                    queue.pop();
+
+                minX=Math.min(minX,cx);
+                maxX=Math.max(maxX,cx);
+
+                minY=Math.min(minY,cy);
+                maxY=Math.max(maxY,cy);
+
+                const neighbors=[
+                    [cx+1,cy],
+                    [cx-1,cy],
+                    [cx,cy+1],
+                    [cx,cy-1]
+                ];
+
+                for(const [nx,ny] of neighbors){
+
+                    if(
+                        nx<0 ||
+                        ny<0 ||
+                        nx>=width ||
+                        ny>=height
+                    ) continue;
+
+                    const nindex =
+                        ny*width+nx;
+
+                    if(visited[nindex])
+                        continue;
+
+                    if(alpha(nx,ny)===0)
+                        continue;
+
+                    visited[nindex]=1;
+
+                    queue.push([nx,ny]);
+
+                }
+
+            }
+
+            sprites.push({
+
+                x:minX,
+                y:minY,
+                w:maxX-minX+1,
+                h:maxY-minY+1
+
+            });
+
+        }
+
+    }
+
+    return sprites;
+
+}
+
+function extractSprite(
+    imageData,
+    rect,
+    targetW,
+    targetH,
+    horizontalMode,
+    verticalMode
+){
+
+    const tempCanvas =
+        document.createElement("canvas");
+
+    tempCanvas.width =
+        imageData.width;
+
+    tempCanvas.height =
+        imageData.height;
+
+    tempCanvas
+        .getContext("2d")
+        .putImageData(imageData,0,0);
+
+    const sourceCanvas =
+        document.createElement("canvas");
+
+    sourceCanvas.width =
+        rect.w;
+
+    sourceCanvas.height =
+        rect.h;
+
+    sourceCanvas
+        .getContext("2d")
+        .drawImage(
+            tempCanvas,
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            0,
+            0,
+            rect.w,
+            rect.h
+        );
+
+    const finalCanvas =
+        document.createElement("canvas");
+
+    finalCanvas.width =
+        Math.max(targetW, rect.w);
+
+    finalCanvas.height =
+        Math.max(targetH, rect.h);
+
+    const fctx =
+        finalCanvas.getContext("2d");
+
+    const extraW =
+        Math.max(
+            0,
+            targetW - rect.w
+        );
+
+    const extraH =
+        Math.max(
+            0,
+            targetH - rect.h
+        );
+
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if(rect.w < targetW){
+
+        switch(horizontalMode){
+
+            case "left":
+                offsetX = extraW;
+                break;
+
+            case "right":
+                offsetX = 0;
+                break;
+
+            case "both":
+                offsetX =
+                    Math.floor(extraW/2);
+                break;
+
+        }
+
+    }
+
+    if(rect.h < targetH){
+
+        switch(verticalMode){
+
+            case "top":
+                offsetY = extraH;
+                break;
+
+            case "bottom":
+                offsetY = 0;
+                break;
+
+            case "both":
+                offsetY =
+                    Math.floor(extraH/2);
+                break;
+
+        }
+
+    }
+
+    fctx.clearRect(
+        0,
+        0,
+        finalCanvas.width,
+        finalCanvas.height
+    );
+
+    fctx.drawImage(
+        sourceCanvas,
+        offsetX,
+        offsetY
+    );
+
+    return finalCanvas;
+
+}
+
+function canvasToBlob(canvas){
+
+    return new Promise(resolve=>{
+
+        canvas.toBlob(
+            resolve,
+            "image/png"
+        );
+
+    });
+
+}
+
+</script>
+
+</body>
+</html>
