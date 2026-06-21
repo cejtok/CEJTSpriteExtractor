@@ -62,5 +62,5 @@ jump_1.png
 
 ## Author
 
-Carlos Ernesto Jimenez Torres
-cejtok@gmail.com
+- Carlos Ernesto Jimenez Torres
+- cejtok@gmail.com
