@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -254,10 +254,10 @@ footer{
     <h1>CEJTSpriteExtractor</h1>
 
     <label class="language-selector">
-        <span id="languageLabel">Idioma</span>
+        <span id="languageLabel">Language</span>
         <select id="languageSelect">
-            <option value="es" selected>Español</option>
-            <option value="en">English</option>
+            <option value="es">Español</option>
+            <option value="en" selected>English</option>
         </select>
     </label>
 
@@ -456,7 +456,7 @@ let selectedSpriteIndexes = new Set();
 let nextGroupId = 1;
 let groupPreviewFrames = [];
 let groupPreviewFrameIndex = 0;
-let currentLanguage = "es";
+let currentLanguage = "en";
 
 const translations = {
     es: {
