@@ -1,4 +1,4 @@
-# CEJT Sprite Extractor
+# CEJTSpriteExtractor
 
 Static web application for detecting sprites inside a transparent spritesheet, organizing them into groups, and exporting them as PNG images inside a ZIP file.
 
